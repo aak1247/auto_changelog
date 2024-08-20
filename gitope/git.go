@@ -192,12 +192,26 @@ func GetProjectPath(r *git.Repository) string {
 	//var remoteUrl string
 	for _, remote := range remotes {
 		if remote.Config().Name == "origin" {
-			fullUrl = remote.String()
+			fullUrl = remote.Config().URLs[0]
 		}
 	}
-	s := strings.Split(fullUrl, "//")[1]
-	repo := strings.SplitN(s, "/", 2)[1]
-	path := strings.Split(repo, ".")[0]
+	s := fullUrl
+	if strings.Contains(fullUrl, "//") {
+		s = strings.Split(fullUrl, "//")[1]
+	}
+	if strings.Contains(s, ":") {
+		s = strings.SplitN(s, ":", 2)[1]
+		port := strings.Split(s, "/")[0]
+		if _, e := strconv.Atoi(port); e == nil {
+			// 带端口
+			s = strings.SplitN(s, "/", 2)[1]
+		} else {
+			// 默认端口
+			s = s
+		}
+	}
+
+	path := strings.Split(s, ".")[0]
 	return path
 }
 
@@ -213,7 +227,10 @@ func GetBaseUrl(r *git.Repository) string {
 			fullUrl = remote.String()
 		}
 	}
-	s := strings.Split(fullUrl, "//")[1]
+	s := fullUrl
+	if strings.Contains(fullUrl, "//") {
+		s = strings.Split(fullUrl, "//")[1]
+	}
 	baseUrl := strings.Split(s, "/")[0]
 	if strings.Contains(baseUrl, "@") {
 		// 去掉@
@@ -227,10 +244,23 @@ func GetBaseUrl(r *git.Repository) string {
 }
 
 func GetCommitUrl(base, project, hash string) string {
-	return fmt.Sprintf("https://%s/%s/-/commit/%s", base, project, hash)
+	if strings.Contains(base, "gitlab") {
+		return fmt.Sprintf("https://%s/%s/-/commit/%s", base, project, hash)
+	}
+	if strings.Contains(base, "github") {
+		return fmt.Sprintf("https://%s/%s/commit/%s", base, project, hash)
+	}
+	return fmt.Sprintf("https://%s/%s/commit/%s", base, project, hash)
 }
 
 func GetTagUrl(base, project, tagName string) string {
+	if strings.Contains(base, "gitlab") {
+		return fmt.Sprintf("https://%s/%s/-/tags/%s", base, project, tagName)
+	}
+	if strings.Contains(base, "github") {
+		return fmt.Sprintf("https://%s/%s/releases/tag/%s", base, project, tagName)
+	}
+
 	return fmt.Sprintf("https://%s/%s/-/tags/%s", base, project, tagName)
 }
 
