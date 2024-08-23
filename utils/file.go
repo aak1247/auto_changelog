@@ -13,6 +13,13 @@ func FileExists(path string) bool {
 }
 
 func InsertToFile(path string, content string, skipRows int) error {
+	if !FileExists(path) {
+		// 创建文件
+		_, err := os.Create(path)
+		if err != nil {
+			return err
+		}
+	}
 	// 打开文件以读取
 	file, err := os.Open(path)
 	if err != nil {
