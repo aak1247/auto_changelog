@@ -114,6 +114,9 @@ func FindCommits(tag2 *plumbing.Reference, tag1 *plumbing.Reference, r *git.Repo
 			// 结束
 			end = true
 		}
+		if configs.SkipMsgs.ShouldSkip(commit.Message) {
+			continue
+		}
 		if start && !end {
 			commits = append(commits, commit)
 		}

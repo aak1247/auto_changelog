@@ -13,14 +13,19 @@ import (
 func main() {
 	var repoPath string
 	var fileName = "changelog.md"
+	var skip = "skip"
 	flag.StringVar(&repoPath, "p", "", "仓库地址")
 	flag.StringVar(&fileName, "f", "changelog.md", "文件名")
+	flag.StringVar(&skip, "skip", "skip", "跳过消息")
 	flag.Parse()
 	if repoPath == "" {
 		panic("repo path not presented")
 	}
 	r, err := git.PlainOpen(repoPath)
 	if err != nil {
+		panic(err)
+	}
+	if err = configs.ParseSkipMsg(skip); err != nil {
 		panic(err)
 	}
 

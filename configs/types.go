@@ -18,7 +18,4 @@ var (
 		"merge",
 		"wip",
 	}
-	BaseUrl              = ""
-	Project              = ""
-	ChangelogHeaderLines = 2
 )
