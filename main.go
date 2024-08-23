@@ -17,6 +17,7 @@ func main() {
 	flag.StringVar(&repoPath, "p", "", "仓库地址")
 	flag.StringVar(&fileName, "f", "changelog.md", "文件名")
 	flag.StringVar(&skip, "skip", "skip", "跳过消息")
+	flag.BoolVar(&configs.Init, "init", false, "初始化文件")
 	flag.Parse()
 	if repoPath == "" {
 		panic("repo path not presented")
@@ -32,11 +33,16 @@ func main() {
 	configs.Project = gitope.GetProjectPath(r) // 用于生成链接
 	configs.BaseUrl = gitope.GetBaseUrl(r)
 
+	// 不存在时自动执行Init
+	if !utils.FileExists(fileName) {
+		configs.Init = true
+	}
+
 	tag1, tag2, err := gitope.FindTag(err, r)
 	if err != nil {
 		log.Fatal("failed to find tag", err)
 	}
-	commits := gitope.FindCommits(tag2, tag1, r)
+	commits := gitope.FindCommits(tag2, tag1, r, configs.Init)
 	head, err := r.CommitObject(tag1.Hash())
 	if err != nil {
 		log.Fatal("failed to find commits", err)

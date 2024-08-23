@@ -50,7 +50,7 @@ func (c *ChangeLog) String() string {
 	return s.String()
 }
 
-func FindCommits(tag2 *plumbing.Reference, tag1 *plumbing.Reference, r *git.Repository) []*object.Commit {
+func FindCommits(tag2 *plumbing.Reference, tag1 *plumbing.Reference, r *git.Repository, init bool) []*object.Commit {
 	var tag1Hash, tag2Hash string
 	var options = &git.LogOptions{
 		From: tag1.Hash(),
@@ -100,7 +100,7 @@ func FindCommits(tag2 *plumbing.Reference, tag1 *plumbing.Reference, r *git.Repo
 	var start, end bool
 	for {
 		commit, err := logIter.Next()
-		if err != nil {
+		if err != nil || commit == nil {
 			break
 		}
 		if end {
@@ -110,7 +110,7 @@ func FindCommits(tag2 *plumbing.Reference, tag1 *plumbing.Reference, r *git.Repo
 			// 开始
 			start = true
 		}
-		if commit.Hash.String() == tag2Hash {
+		if commit.Hash.String() == tag2Hash && !init {
 			// 结束
 			end = true
 		}
@@ -119,9 +119,6 @@ func FindCommits(tag2 *plumbing.Reference, tag1 *plumbing.Reference, r *git.Repo
 		}
 		if start && !end {
 			commits = append(commits, commit)
-		}
-		if end {
-			break
 		}
 	}
 	return commits

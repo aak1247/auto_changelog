@@ -8,6 +8,7 @@ var (
 	BaseUrl                    = ""
 	Project                    = ""
 	ChangelogHeaderLines       = 2
+	Init                       = false
 	SkipMsgs             skips = make([]string, 0)
 )
 
