@@ -17,5 +17,6 @@ var (
 		"revert",
 		"merge",
 		"wip",
+		"other",
 	}
 )

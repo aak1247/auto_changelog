@@ -13,9 +13,14 @@ import (
 	"time"
 )
 
+type Ref struct {
+	Hash string
+	When time.Time
+}
+
 type ChangeLog struct {
 	Version string
-	Head    *object.Commit
+	Head    *Ref
 	Groups  map[string][]*object.Commit
 }
 
@@ -23,7 +28,12 @@ func (c *ChangeLog) ParseCommits(commits []*object.Commit) {
 	// 分组
 	for _, commit := range commits {
 		t, _ := ParseCommitMessage(commit)
-		if g, ok := c.Groups[t]; ok == false {
+		if !configs.MR {
+			if strings.Contains(commit.Message, "Merge") {
+				continue
+			}
+		}
+		if g, ok := c.Groups[t]; ok == true {
 			g = append(g, commit)
 			c.Groups[t] = g
 		} else {
@@ -35,25 +45,28 @@ func (c *ChangeLog) ParseCommits(commits []*object.Commit) {
 func (c *ChangeLog) String() string {
 	s := strings.Builder{}
 	s.WriteString(fmt.Sprintf("## %s    <sub>[%s](%s) - [%s](%s) [CI](%s)</sub>\n\n", c.Version,
-		c.Head.Author.When.Format("2006-01-02"), GetTagUrl(configs.BaseUrl, configs.Project, c.Version),
-		c.Head.Hash.String()[:8], GetCommitUrl(configs.BaseUrl, configs.Project, c.Version),
+		c.Head.When.Format("2006-01-02"), GetTagUrl(configs.BaseUrl, configs.Project, c.Version),
+		c.Head.Hash[:8], GetCommitUrl(configs.BaseUrl, configs.Project, c.Version),
 		GetTagPipelineUrl(configs.BaseUrl, configs.Project, c.Version)))
 	for _, k := range configs.Types {
 		if v, ok := c.Groups[k]; ok {
+			if len(v) == 0 {
+				continue
+			}
 			s.WriteString(fmt.Sprintf("### %s\n", k))
 			for _, v := range v {
-				// TODO
-				s.WriteString(fmt.Sprintf("- [%s ( %s by %s )](%s)\n", v.Message, v.Hash.String()[:8], v.Author.Name, GetCommitUrl(configs.BaseUrl, configs.Project, v.Hash.String())))
+				s.WriteString(fmt.Sprintf("- %s ( [%s by %s](%s) )\n", v.Message, v.Hash.String()[:8], v.Author.Name, GetCommitUrl(configs.BaseUrl, configs.Project, v.Hash.String())))
 			}
 		}
 	}
 	return s.String()
 }
 
-func FindCommits(tag2 *plumbing.Reference, tag1 *plumbing.Reference, r *git.Repository, init bool) []*object.Commit {
+func FindCommits(tag2 *plumbing.Reference, tag1 *plumbing.Reference, r *git.Repository) []*object.Commit {
 	var tag1Hash, tag2Hash string
 	var options = &git.LogOptions{
-		From: tag1.Hash(),
+		From:  tag1.Hash(),
+		Order: git.LogOrderDFS,
 	}
 	tag1Hash = tag1.Hash().String()
 	var startTime, endTime time.Time
@@ -94,7 +107,7 @@ func FindCommits(tag2 *plumbing.Reference, tag1 *plumbing.Reference, r *git.Repo
 	// 遍历两个tag中间的log, 通过hash
 	logIter, err := r.Log(options)
 	if err != nil {
-		panic(err)
+		return make([]*object.Commit, 0)
 	}
 	commits := make([]*object.Commit, 0)
 	var start, end bool
@@ -104,20 +117,20 @@ func FindCommits(tag2 *plumbing.Reference, tag1 *plumbing.Reference, r *git.Repo
 			break
 		}
 		if end {
-			break
+			log.Println("branch ended")
 		}
 		if commit.Hash.String() == tag1Hash {
 			// 开始
 			start = true
 		}
-		if commit.Hash.String() == tag2Hash && !init {
+		if commit.Hash.String() == tag2Hash {
 			// 结束
 			end = true
 		}
 		if configs.SkipMsgs.ShouldSkip(commit.Message) {
 			continue
 		}
-		if start && !end {
+		if start {
 			commits = append(commits, commit)
 		}
 	}
@@ -157,6 +170,39 @@ func FindTag(err error, r *git.Repository) (*plumbing.Reference, *plumbing.Refer
 		panic(err)
 	}
 	return tag1, tag2, err
+}
+
+func FindPreviousTag(r *git.Repository, currentTag *plumbing.Reference) (*plumbing.Reference, error) {
+	// 先拿到最近的两个tag
+	var tag2 *plumbing.Reference
+	var tag2Name = "0.0.0"
+	var currentTagName = TagName(currentTag)
+	tagIter, err := r.Tags()
+	if err != nil {
+		panic(err)
+	}
+	// 遍历找到最后两个
+	for {
+		tagN, err := tagIter.Next()
+		if err != nil || tagN == nil {
+			break
+		}
+		tagNName := TagName(tagN)
+		if VersionCompare(tagNName, tag2Name) > 0 && VersionCompare(tagNName, currentTagName) < 0 {
+			tag2 = tagN
+			tag2Name = tagNName
+		}
+	}
+
+	if tag2 == nil {
+		// 没有tag
+		return nil, err
+	}
+	if err != nil {
+		// 报错
+		panic(err)
+	}
+	return tag2, err
 }
 
 func ParseCommitMessage(commit *object.Commit) (typ string, msg string) {
@@ -245,12 +291,12 @@ func GetBaseUrl(r *git.Repository) string {
 
 func GetCommitUrl(base, project, hash string) string {
 	if strings.Contains(base, "gitlab") {
-		return fmt.Sprintf("https://%s/%s/-/commit/%s", base, project, hash)
+		return fmt.Sprintf("https://%s/%s/-/commits/%s", base, project, hash)
 	}
 	if strings.Contains(base, "github") {
 		return fmt.Sprintf("https://%s/%s/commit/%s", base, project, hash)
 	}
-	return fmt.Sprintf("https://%s/%s/commit/%s", base, project, hash)
+	return fmt.Sprintf("https://%s/%s/commits/%s", base, project, hash)
 }
 
 func GetTagUrl(base, project, tagName string) string {
@@ -268,6 +314,7 @@ func GetTagPipelineUrl(base, project, tagName string) string {
 	return fmt.Sprintf("https://%s/%s/pipelines?page=1&scope=tags&ref=%s", base, project, tagName)
 }
 
+// VersionCompare 版本大于
 func VersionCompare(v1, v2 string) int {
 	makeup := func(s []string) []string {
 		if len(s) < 3 {
