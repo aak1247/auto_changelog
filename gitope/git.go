@@ -47,10 +47,7 @@ func (c *ChangeLog) ParseCommits(commits []*object.Commit) {
 // String 输出changelog
 func (c *ChangeLog) String() string {
 	s := strings.Builder{}
-	s.WriteString(fmt.Sprintf("## %s    <sub>[%s](%s) - [%s](%s) [CI](%s)</sub>\n\n", c.Version,
-		c.Head.When.Format("2006-01-02"), GetTagUrl(configs.BaseUrl, configs.Project, c.Version),
-		c.Head.Hash[:8], GetCommitUrl(configs.BaseUrl, configs.Project, c.Version),
-		GetTagPipelineUrl(configs.BaseUrl, configs.Project, c.Version)))
+	s.WriteString(c.RenderVersionHeader())
 	// 分类型输出
 	for _, k := range configs.Types {
 		if v, ok := c.Groups[k]; ok {
@@ -71,33 +68,48 @@ func (c *ChangeLog) String() string {
 						continue
 					}
 				}
-				// 多行处理
-				msg := v.Message
-				contents := make([]string, 0)
-				hasContent := false
-				if utils.IsMultiline(msg) {
-					contents = strings.Split(msg, "\n")
-					msg = contents[0]
-					contents = contents[1:]
-					for _, c := range contents {
-						if strings.TrimSpace(c) != "" {
-							hasContent = true
-							break
-						}
-					}
-				}
-				// 输出
-				s.WriteString(fmt.Sprintf("- %s ( [%s by %s](%s) ) - <sub>%s</sub>\n", msg, v.Hash.String()[:8], v.Author.Name, GetCommitUrl(configs.BaseUrl, configs.Project, v.Hash.String()), v.Author.When.Format("2006-01-02 15:04")))
-				// 多行内容输出
-				if hasContent {
-					s.WriteString("  ```markdown\n")
-					for _, v := range contents {
-						s.WriteString(fmt.Sprintf("  %s\n", v))
-					}
-					s.WriteString("  ```\n")
-				}
+
+				commitMsg := c.RenderCommit(v)
+				s.WriteString(commitMsg)
 			}
 		}
+	}
+	return s.String()
+}
+
+func (c *ChangeLog) RenderVersionHeader() string {
+	return fmt.Sprintf("## %s    <sub>[%s](%s) - [%s](%s) %s</sub>\n\n", c.Version,
+		c.Head.When.Format("2006-01-02"), GetTagUrl(configs.BaseUrl, configs.Project, c.Version),
+		c.Head.Hash[:8], GetCommitUrl(configs.BaseUrl, configs.Project, c.Version),
+		RenderPipelineUrl(configs.BaseUrl, configs.Project, c.Version))
+}
+
+func (c *ChangeLog) RenderCommit(v *object.Commit) string {
+	s := strings.Builder{}
+	msg := v.Message
+	contents := make([]string, 0)
+	hasContent := false
+	// 多行处理
+	if utils.IsMultiline(msg) {
+		contents = strings.Split(msg, "\n")
+		msg = contents[0]
+		contents = contents[1:]
+		for _, c := range contents {
+			if strings.TrimSpace(c) != "" {
+				hasContent = true
+				break
+			}
+		}
+	}
+	// 输出
+	s.WriteString(fmt.Sprintf("- %s ( [%s by %s](%s) ) - <sub>%s</sub>\n", msg, v.Hash.String()[:8], v.Author.Name, GetCommitUrl(configs.BaseUrl, configs.Project, v.Hash.String()), v.Author.When.Format("2006-01-02 15:04")))
+	// 多行内容输出
+	if hasContent {
+		s.WriteString("  ```markdown\n")
+		for _, v := range contents {
+			s.WriteString(fmt.Sprintf("  %s\n", v))
+		}
+		s.WriteString("  ```\n")
 	}
 	return s.String()
 }
@@ -259,11 +271,6 @@ func ParseCommitMessageType(commit *object.Commit) (typ string) {
 	return "other"
 }
 
-func MakeCommitMessage(commit *object.Commit) string {
-	msg := fmt.Sprintf("%s (by %s)", commit.Message, commit.Author)
-	return msg
-}
-
 func TagName(ref *plumbing.Reference) string {
 	return strings.TrimPrefix(ref.Name().String(), "refs/tags/")
 }
@@ -284,7 +291,7 @@ func GetProjectPath(r *git.Repository) string {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return strings.TrimSuffix(endpoint.Path, ".git")
+	return strings.TrimSuffix(strings.TrimPrefix(endpoint.Path, "/"), ".git")
 }
 
 func GetBaseUrl(r *git.Repository) string {
@@ -312,7 +319,7 @@ func GetBaseUrl(r *git.Repository) string {
 	} else {
 		baseUrl = "https://" + baseUrl
 	}
-	if endpoint.Port != 0 {
+	if endpoint.Port != 0 && strings.Contains(endpoint.Protocol, "http") {
 		baseUrl += ":" + strconv.Itoa(endpoint.Port)
 	}
 	return baseUrl
@@ -341,6 +348,16 @@ func GetTagUrl(base, project, tagName string) string {
 
 func GetTagPipelineUrl(base, project, tagName string) string {
 	return fmt.Sprintf("%s/%s/pipelines?page=1&scope=tags&ref=%s", base, project, tagName)
+}
+
+func RenderPipelineUrl(base, project, tagName string) string {
+	if strings.Contains(base, "gitlab") {
+		return fmt.Sprintf("[![CI](%s/%s/badges/%s/pipeline.svg?ignore_skipped=true)](%s)",
+			base, project, tagName, GetTagPipelineUrl(base, project, tagName))
+	} else if strings.Contains(base, "github") {
+		return fmt.Sprintf("[![GH Action](%s/%s/main.yml/badge.svg?branch=%s)](%s/%s/actions)", base, project, tagName, base, project)
+	}
+	return "unknown"
 }
 
 // VersionCompare 版本大于

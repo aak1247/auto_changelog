@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"github.com/aak1247/gchangelog/configs"
 	"github.com/aak1247/gchangelog/gitope"
 	"github.com/aak1247/gchangelog/utils"
@@ -15,7 +14,6 @@ import (
 const version = "0.0.2"
 
 func main() {
-	fmt.Println("version: " + version)
 	var repoPath string
 	var fileName = "changelog.md"
 	var skip = "skip"
