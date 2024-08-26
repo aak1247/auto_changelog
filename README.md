@@ -23,3 +23,7 @@ gchangelog [-options -arguments]
   -skip string
         跳过消息 (default "skip"), 匹配跳过消息的commit message不会生成到changelog中,多个消息用","分割
 ```
+
+## 示例
+
+见 [changelog.md](changelog.md) , 里面的内容是自动生成的
