@@ -55,6 +55,7 @@ func (c *ChangeLog) String() string {
 			}
 			s.WriteString(fmt.Sprintf("### %s\n", k))
 			for _, v := range v {
+				// todo MULTILINE MESSAGE
 				s.WriteString(fmt.Sprintf("- %s ( [%s by %s](%s) )\n", v.Message, v.Hash.String()[:8], v.Author.Name, GetCommitUrl(configs.BaseUrl, configs.Project, v.Hash.String())))
 			}
 		}
