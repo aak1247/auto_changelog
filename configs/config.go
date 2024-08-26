@@ -5,6 +5,7 @@ import "strings"
 type skips []string
 
 var (
+	HTTP                       = false
 	BaseUrl                    = ""
 	Project                    = ""
 	ChangelogHeaderLines       = 2
@@ -22,7 +23,7 @@ func ParseSkipMsg(msg string) error {
 
 func (s *skips) ShouldSkip(msg string) bool {
 	for _, m := range *s {
-		if m == msg {
+		if strings.TrimSpace(m) == strings.TrimSpace(msg) {
 			return true
 		}
 	}

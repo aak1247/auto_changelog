@@ -3,9 +3,11 @@ package gitope
 import (
 	"fmt"
 	"github.com/aak1247/gchangelog/configs"
+	"github.com/aak1247/gchangelog/utils"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"log"
 	"regexp"
 	"strconv"
@@ -27,7 +29,7 @@ type ChangeLog struct {
 func (c *ChangeLog) ParseCommits(commits []*object.Commit) {
 	// 分组
 	for _, commit := range commits {
-		t, _ := ParseCommitMessage(commit)
+		t := ParseCommitMessageType(commit)
 		if !configs.MR {
 			if strings.Contains(commit.Message, "Merge") {
 				continue
@@ -55,8 +57,28 @@ func (c *ChangeLog) String() string {
 			}
 			s.WriteString(fmt.Sprintf("### %s\n", k))
 			for _, v := range v {
-				// todo MULTILINE MESSAGE
-				s.WriteString(fmt.Sprintf("- %s ( [%s by %s](%s) )\n", v.Message, v.Hash.String()[:8], v.Author.Name, GetCommitUrl(configs.BaseUrl, configs.Project, v.Hash.String())))
+				msg := v.Message
+				contents := make([]string, 0)
+				hasContent := false
+				if utils.IsMultiline(msg) {
+					contents = strings.Split(msg, "\n")
+					msg = contents[0]
+					contents = contents[1:]
+					for _, c := range contents {
+						if strings.TrimSpace(c) != "" {
+							hasContent = true
+							break
+						}
+					}
+				}
+				s.WriteString(fmt.Sprintf("- %s ( [%s by %s](%s) )\n", msg, v.Hash.String()[:8], v.Author.Name, GetCommitUrl(configs.BaseUrl, configs.Project, v.Hash.String())))
+				if hasContent {
+					s.WriteString("  ```markdown\n")
+					for _, v := range contents {
+						s.WriteString(fmt.Sprintf("  %s\n", v))
+					}
+					s.WriteString("  ```\n")
+				}
 			}
 		}
 	}
@@ -118,7 +140,8 @@ func FindCommits(tag2 *plumbing.Reference, tag1 *plumbing.Reference, r *git.Repo
 			break
 		}
 		if end {
-			log.Println("branch ended")
+			// do not print this
+			// log.Println("branch ended")
 		}
 		if commit.Hash.String() == tag1Hash {
 			// 开始
@@ -206,19 +229,17 @@ func FindPreviousTag(r *git.Repository, currentTag *plumbing.Reference) (*plumbi
 	return tag2, err
 }
 
-func ParseCommitMessage(commit *object.Commit) (typ string, msg string) {
+func ParseCommitMessageType(commit *object.Commit) (typ string) {
 	fullMsg := commit.Message
-	s, _ := commit.Stats()
-	s.String()
 	// 根据configs.Types 解析类型和实际配置
 	for _, t := range configs.Types {
 		upper := strings.ToUpper(t)
 		camel := strings.ToTitle(t)
 		if strings.HasPrefix(fullMsg, camel) || strings.HasPrefix(fullMsg, t) || strings.HasPrefix(fullMsg, upper) {
-			return t, MakeCommitMessage(commit)
+			return t
 		}
 	}
-	return "other", MakeCommitMessage(commit)
+	return "other"
 }
 
 func MakeCommitMessage(commit *object.Commit) string {
@@ -242,24 +263,11 @@ func GetProjectPath(r *git.Repository) string {
 			fullUrl = remote.Config().URLs[0]
 		}
 	}
-	s := fullUrl
-	if strings.Contains(fullUrl, "//") {
-		s = strings.Split(fullUrl, "//")[1]
+	endpoint, err := transport.NewEndpoint(fullUrl)
+	if err != nil {
+		log.Fatal(err)
 	}
-	if strings.Contains(s, ":") {
-		s = strings.SplitN(s, ":", 2)[1]
-		port := strings.Split(s, "/")[0]
-		if _, e := strconv.Atoi(port); e == nil {
-			// 带端口
-			s = strings.SplitN(s, "/", 2)[1]
-		} else {
-			// 默认端口
-			s = s
-		}
-	}
-
-	path := strings.Split(s, ".")[0]
-	return path
+	return strings.TrimSuffix(endpoint.Path, ".git")
 }
 
 func GetBaseUrl(r *git.Repository) string {
@@ -271,48 +279,51 @@ func GetBaseUrl(r *git.Repository) string {
 	//var remoteUrl string
 	for _, remote := range remotes {
 		if remote.Config().Name == "origin" {
-			fullUrl = remote.String()
+			fullUrl = remote.Config().URLs[0]
 		}
 	}
-	s := fullUrl
-	if strings.Contains(fullUrl, "//") {
-		s = strings.Split(fullUrl, "//")[1]
+	endpoint, err := transport.NewEndpoint(fullUrl)
+	if err != nil {
+		log.Fatal(err)
 	}
-	baseUrl := strings.Split(s, "/")[0]
-	if strings.Contains(baseUrl, "@") {
-		// 去掉@
-		baseUrl = strings.Split(baseUrl, "@")[1]
+	if endpoint.Protocol == "http" {
+		configs.HTTP = true
 	}
-	if strings.Contains(baseUrl, ":") {
-		// 去掉:
-		baseUrl = strings.Split(baseUrl, ":")[0]
+	baseUrl := endpoint.Host
+	if configs.HTTP {
+		baseUrl = "http://" + baseUrl
+	} else {
+		baseUrl = "https://" + baseUrl
+	}
+	if endpoint.Port != 0 {
+		baseUrl += ":" + strconv.Itoa(endpoint.Port)
 	}
 	return baseUrl
 }
 
 func GetCommitUrl(base, project, hash string) string {
 	if strings.Contains(base, "gitlab") {
-		return fmt.Sprintf("https://%s/%s/-/commits/%s", base, project, hash)
+		return fmt.Sprintf("%s/%s/-/commits/%s", base, project, hash)
 	}
 	if strings.Contains(base, "github") {
-		return fmt.Sprintf("https://%s/%s/commit/%s", base, project, hash)
+		return fmt.Sprintf("%s/%s/commit/%s", base, project, hash)
 	}
-	return fmt.Sprintf("https://%s/%s/commits/%s", base, project, hash)
+	return fmt.Sprintf("%s/%s/commits/%s", base, project, hash)
 }
 
 func GetTagUrl(base, project, tagName string) string {
 	if strings.Contains(base, "gitlab") {
-		return fmt.Sprintf("https://%s/%s/-/tags/%s", base, project, tagName)
+		return fmt.Sprintf("%s/%s/-/tags/%s", base, project, tagName)
 	}
 	if strings.Contains(base, "github") {
-		return fmt.Sprintf("https://%s/%s/releases/tag/%s", base, project, tagName)
+		return fmt.Sprintf("%s/%s/releases/tag/%s", base, project, tagName)
 	}
 
-	return fmt.Sprintf("https://%s/%s/-/tags/%s", base, project, tagName)
+	return fmt.Sprintf("%s/%s/-/tags/%s", base, project, tagName)
 }
 
 func GetTagPipelineUrl(base, project, tagName string) string {
-	return fmt.Sprintf("https://%s/%s/pipelines?page=1&scope=tags&ref=%s", base, project, tagName)
+	return fmt.Sprintf("%s/%s/pipelines?page=1&scope=tags&ref=%s", base, project, tagName)
 }
 
 // VersionCompare 版本大于
