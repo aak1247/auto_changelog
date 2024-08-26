@@ -11,6 +11,7 @@ var (
 	ChangelogHeaderLines       = 2
 	MR                         = false
 	SkipMsgs             skips = make([]string, 0)
+	DefaultHead                = "## ChangeLog\n\n"
 )
 
 func ParseSkipMsg(msg string) error {

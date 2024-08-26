@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bufio"
+	"github.com/aak1247/gchangelog/configs"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -15,10 +16,13 @@ func FileExists(path string) bool {
 func InsertToFile(path string, content string, skipRows int) error {
 	if !FileExists(path) {
 		// 创建文件
-		_, err := os.Create(path)
+		file, err := os.Create(path)
 		if err != nil {
 			return err
 		}
+		// 写入文件头
+		file.WriteString(configs.DefaultHead)
+		file.Close()
 	}
 	// 打开文件以读取
 	file, err := os.Open(path)
