@@ -44,19 +44,34 @@ func (c *ChangeLog) ParseCommits(commits []*object.Commit) {
 	}
 }
 
+// String 输出changelog
 func (c *ChangeLog) String() string {
 	s := strings.Builder{}
 	s.WriteString(fmt.Sprintf("## %s    <sub>[%s](%s) - [%s](%s) [CI](%s)</sub>\n\n", c.Version,
 		c.Head.When.Format("2006-01-02"), GetTagUrl(configs.BaseUrl, configs.Project, c.Version),
 		c.Head.Hash[:8], GetCommitUrl(configs.BaseUrl, configs.Project, c.Version),
 		GetTagPipelineUrl(configs.BaseUrl, configs.Project, c.Version)))
+	// 分类型输出
 	for _, k := range configs.Types {
 		if v, ok := c.Groups[k]; ok {
 			if len(v) == 0 {
 				continue
 			}
 			s.WriteString(fmt.Sprintf("### %s\n", k))
+			// 用于去重
+			msgMap := make(map[string]string)
+			for _, commit := range v {
+				msgMap[commit.Message] = commit.Hash.String()
+			}
+			// 拼接单条commit msg
 			for _, v := range v {
+				// 去重, 旧提交不输出
+				if hash, ok := msgMap[v.Message]; ok {
+					if hash != v.Hash.String() {
+						continue
+					}
+				}
+				// 多行处理
 				msg := v.Message
 				contents := make([]string, 0)
 				hasContent := false
@@ -71,7 +86,9 @@ func (c *ChangeLog) String() string {
 						}
 					}
 				}
-				s.WriteString(fmt.Sprintf("- %s ( [%s by %s](%s) )\n", msg, v.Hash.String()[:8], v.Author.Name, GetCommitUrl(configs.BaseUrl, configs.Project, v.Hash.String())))
+				// 输出
+				s.WriteString(fmt.Sprintf("- %s ( [%s by %s](%s) ) - <sub>%s</sub>\n", msg, v.Hash.String()[:8], v.Author.Name, GetCommitUrl(configs.BaseUrl, configs.Project, v.Hash.String()), v.Author.When.Format("2006-01-02 15:04")))
+				// 多行内容输出
 				if hasContent {
 					s.WriteString("  ```markdown\n")
 					for _, v := range contents {
