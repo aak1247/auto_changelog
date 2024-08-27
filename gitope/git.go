@@ -396,10 +396,20 @@ func VersionCompare(v1, v2 string) int {
 		s1 := rep.Split(patch1, 2)
 		s2 := rep.Split(patch2, 2)
 		if s1[0] == s2[0] {
-			if len(s1) == 2 && len(s1[1]) == 2 {
+			if len(s1) == 2 && len(s2) == 2 {
 				return strings.Compare(s1[1], s2[1])
 			} else {
-				return len(s1) - len(s2)
+				if len(s1) != len(s2) {
+					return len(s1) - len(s2)
+				} else {
+					// 长度相等，字典序
+					for i := 0; i < len(s1); i++ {
+						if strings.Compare(s1[i], s2[i]) != 0 {
+							return strings.Compare(s1[i], s2[i])
+						}
+					}
+					return 0
+				}
 			}
 		} else {
 			num1, _ := strconv.Atoi(s1[0])

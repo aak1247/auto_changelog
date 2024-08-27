@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-const version = "0.0.2"
-
 func main() {
 	var repoPath string
 	var fileName = "changelog.md"
