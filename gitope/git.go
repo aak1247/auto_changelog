@@ -397,7 +397,7 @@ func VersionCompare(v1, v2 string) int {
 		s2 := rep.Split(patch2, 2)
 		if s1[0] == s2[0] {
 			if len(s1) == 2 && len(s2) == 2 {
-				return strings.Compare(s1[1], s2[1])
+				return utils.CompareVersions(s1[1], s2[1])
 			} else {
 				if len(s1) != len(s2) {
 					return len(s1) - len(s2)
